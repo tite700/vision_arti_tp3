@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+phil_test.py
+.idea/misc.xml
+.idea/modules.xml
+.idea/vcs.xml
+.idea/vision_arti_tp3.iml
+.idea/inspectionProfiles/profiles_settings.xml
