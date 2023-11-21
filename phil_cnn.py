@@ -3,7 +3,7 @@ import numpy as np
 from keras.layers import Rescaling
 from keras.applications import VGG16, VGG19
 from keras.models import Sequential
-from keras.layers import Dense, Flatten
+from keras.layers import Dense, Flatten, Conv2D
 from keras.optimizers import Adam
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -17,6 +17,9 @@ data_dir = "./data/natural_images"
 
 # Définir la taille des images en entrée de VGG16 (224x224 pixels)
 img_size = (224, 224)
+
+# Define the input size for cnn
+input_shape = (224, 224, 3)
 
 # Définir le batch size
 batch_size = 128
@@ -53,30 +56,24 @@ for images, labels in train_ds.take(1):
 
 plt.show()
 
-# Base model
-base_model = VGG16(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
-base_model.trainable = False
-
-model = Sequential([
-    Rescaling(scale=1.0/127.5, offset=-1),
-    base_model,
-    Flatten(),
-    Dense(units=32),
-    Dense(units=16),
-    Dense(num_class, activation='softmax')
-])
-
 strategy = tf.distribute.MirroredStrategy()
 
 with strategy.scope():
+    model = Sequential([
+        Conv2D(64, kernel_size=5, activation='relu', input_shape=input_shape),
+        Conv2D(32, kernel_size=3),
+        Conv2D(16, kernel_size=3),
+        Flatten(),
+        Dense(num_class, activation='softmax')
+    ])
+
     model.compile(optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
 
     # Entraîner le modèle
-    model.fit(train_ds, epochs=3, validation_data=val_ds)
+    model.fit(train_ds, epochs=5, validation_data=val_ds)
 
 predictions = model.predict(test_ds)
 
-# Visualize the prediction
 plt.figure(figsize=(10, 10))
 for images, labels in test_ds:
     for i in range(9):

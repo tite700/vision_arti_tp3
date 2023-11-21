@@ -30,7 +30,7 @@
 *.exe
 *.out
 *.app
-phil_test.py
+phil_cnn.py
 .idea/misc.xml
 .idea/modules.xml
 .idea/vcs.xml
