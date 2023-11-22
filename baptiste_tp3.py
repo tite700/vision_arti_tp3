@@ -15,12 +15,12 @@ import matplotlib.pyplot as plt
 ######################################################################################### Paramètres et pré-traitement des données
 
 # Chemin du dossier principal contenant les classes
-base_dir = './natural_images'
+base_dir = './dataset'
 
 # Chemin des dossiers pour les ensembles d'entraînement, de validation et de test
-train_dir = os.path.join(base_dir, './dataset/train')
-val_dir = os.path.join(base_dir, './dataset/val')
-test_dir = os.path.join(base_dir, './dataset/test')
+train_dir = os.path.join(base_dir, 'train')
+val_dir = os.path.join(base_dir, 'val')
+test_dir = os.path.join(base_dir, 'test')
 
 # Création d'un générateur d'images pour les ensembles d'entraînement avec augmentation de données
 train_datagen = ImageDataGenerator(
@@ -133,6 +133,11 @@ custom_cnn_true_classes = test_generator.classes[:test_steps_per_epoch * test_ge
 transfer_model_predictions = transfer_model.predict(test_generator, steps=test_steps_per_epoch)
 transfer_model_pred_classes = np.argmax(transfer_model_predictions, axis=1)
 transfer_model_true_classes = test_generator.classes[:test_steps_per_epoch * test_generator.batch_size]
+
+print("Nombre de classes dans l'ensemble d'entraînement :", train_generator.num_classes)
+print("Nombre de classes dans l'ensemble de validation :", val_generator.num_classes)
+print("Nombre de classes dans l'ensemble de test :", test_generator.num_classes)
+
 
 # Calcul de l'accuracy global du classeur
 custom_cnn_accuracy = accuracy_score(custom_cnn_true_classes, custom_cnn_pred_classes)
