@@ -1,12 +1,13 @@
 import keras
 import numpy as np
 from keras.layers import Rescaling
-from keras.applications import VGG16, VGG19
+from keras.applications.vgg16 import VGG16
 from keras.models import Sequential
 from keras.layers import Dense, Flatten
 from keras.optimizers import Adam
 import matplotlib.pyplot as plt
 import tensorflow as tf
+from sklearn.metrics import accuracy_score, cohen_kappa_score, classification_report
 
 '''
 Simple transfert learning model
@@ -41,17 +42,23 @@ val_ds = val_ds.skip(1)
 
 class_names = ['airplane', 'car', 'cat', 'dog', 'flower', 'fruit', 'motorbike', 'person']
 
-# Visualize dataset
-plt.figure(figsize=(10, 10))
-for images, labels in train_ds.take(1):
-    for i in range(9):
-        ax = plt.subplot(3, 3, i+1)
-        plt.imshow(images[i].numpy().astype("uint8"))
-        index = np.argmax(labels[i])
-        plt.title(class_names[index])
-        plt.axis('off')
 
-plt.show()
+def show_dataset(ds):
+    # Visualize dataset
+    plt.figure(figsize=(10, 10))
+    for images, labels in ds.take(1):
+        for i in range(9):
+            ax = plt.subplot(3, 3, i + 1)
+            plt.imshow(images[i].numpy().astype("uint8"))
+            index = np.argmax(labels[i])
+            plt.title(class_names[index])
+            plt.axis('off')
+
+    plt.show()
+
+
+# Visualize dataset
+show_dataset(train_ds)
 
 # Base model
 base_model = VGG16(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
@@ -61,8 +68,8 @@ model = Sequential([
     Rescaling(scale=1.0/127.5, offset=-1),
     base_model,
     Flatten(),
-    Dense(units=32),
-    Dense(units=16),
+    Dense(units=32, activation='relu'),
+    Dense(units=16, activation='relu'),
     Dense(num_class, activation='softmax')
 ])
 
@@ -72,9 +79,10 @@ with strategy.scope():
     model.compile(optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
 
     # Entraîner le modèle
-    model.fit(train_ds, epochs=3, validation_data=val_ds)
+    model_history = model.fit(train_ds, epochs=5, validation_data=val_ds)
 
 predictions = model.predict(test_ds)
+pred_classes = np.argmax(predictions, axis=1)
 
 # Visualize the prediction
 plt.figure(figsize=(10, 10))
@@ -90,12 +98,28 @@ for images, labels in test_ds:
 plt.show()
 
 # Calculate the accuracy on the test dataset
+true_classes = []
 for images, labels in test_ds:
-    score = 0
     for i in range(len(images)):
-        index_class = np.argmax(labels[i])
-        index_prediction = np.argmax(predictions[i])
-        if index_class == index_prediction:
-            score += 1
+        true_classes.append(np.argmax(labels[i]))
 
-    print('accuracy = ', score/len(images))
+# Model statistics
+accuracy = accuracy_score(true_classes, pred_classes)
+kappa_score = cohen_kappa_score(true_classes, pred_classes)
+report = classification_report(true_classes, pred_classes)
+
+print("Transfer Learning (VGG16) - Accuracy:", accuracy, "Kappa:", kappa_score)
+print("Transfer Learning (VGG16) Report:\n", report)
+
+# Courbe d'apprentissage du modèle de transfer learning avec VGG16
+plt.subplot(1, 1, 1)
+plt.plot(model_history.history['accuracy'], label='Training Accuracy')
+plt.plot(model_history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Transfer Learning (VGG16) - Learning Curve')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.tight_layout()
+plt.savefig('TransfertLearning.jpg')
+plt.show()

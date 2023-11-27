@@ -3,10 +3,11 @@ import numpy as np
 from keras.layers import Rescaling
 from keras.applications import VGG16, VGG19
 from keras.models import Sequential
-from keras.layers import Dense, Flatten, Conv2D
+from keras.layers import Dense, Flatten, Conv2D, MaxPooling2D
 from keras.optimizers import Adam
 import matplotlib.pyplot as plt
 import tensorflow as tf
+from sklearn.metrics import accuracy_score, cohen_kappa_score, classification_report
 
 '''
 Simple transfert learning model
@@ -60,19 +61,23 @@ strategy = tf.distribute.MirroredStrategy()
 
 with strategy.scope():
     model = Sequential([
-        Conv2D(64, kernel_size=5, activation='relu', input_shape=input_shape),
-        Conv2D(32, kernel_size=3),
-        Conv2D(16, kernel_size=3),
+        Conv2D(6, kernel_size=5, activation='relu', input_shape=input_shape),
+        MaxPooling2D(pool_size=(2, 2)),
+        Conv2D(16, kernel_size=5, activation='relu'),
+        Conv2D(16, kernel_size=3, activation='relu'),
         Flatten(),
+        Dense(units=120, activation='relu'),
+        Dense(units=84, activation='relu'),
         Dense(num_class, activation='softmax')
     ])
 
     model.compile(optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
 
     # Entraîner le modèle
-    model.fit(train_ds, epochs=5, validation_data=val_ds)
+    model_history = model.fit(train_ds, epochs=5, validation_data=val_ds)
 
 predictions = model.predict(test_ds)
+pred_classes = np.argmax(predictions, axis=1)
 
 plt.figure(figsize=(10, 10))
 for images, labels in test_ds:
@@ -87,12 +92,29 @@ for images, labels in test_ds:
 plt.show()
 
 # Calculate the accuracy on the test dataset
+true_classes = []
 for images, labels in test_ds:
-    score = 0
     for i in range(len(images)):
-        index_class = np.argmax(labels[i])
-        index_prediction = np.argmax(predictions[i])
-        if index_class == index_prediction:
-            score += 1
+        true_classes.append(np.argmax(labels[i]))
 
-    print('accuracy = ', score/len(images))
+# Model statistics
+accuracy = accuracy_score(true_classes, pred_classes)
+kappa_score = cohen_kappa_score(true_classes, pred_classes)
+report = classification_report(true_classes, pred_classes)
+
+print("Custom CNN - Accuracy:", accuracy, "Kappa:", kappa_score)
+print("Custom CNN Report:\n", report)
+
+# Courbe d'apprentissage du modèle de transfer learning avec VGG16
+plt.subplot(1, 1, 1)
+plt.plot(model_history.history['accuracy'], label='Training Accuracy')
+plt.plot(model_history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Custom CNN - Learning Curve')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.tight_layout()
+plt.savefig('CustomCNN.jpg')
+plt.show()
+
