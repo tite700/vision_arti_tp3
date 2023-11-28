@@ -3,7 +3,7 @@ import numpy as np
 from keras.layers import Rescaling
 from keras.applications.vgg16 import VGG16
 from keras.models import Sequential
-from keras.layers import Dense, Flatten
+from keras.layers import Dense, Flatten, Conv2D, MaxPooling2D
 from keras.optimizers import Adam
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -64,7 +64,7 @@ show_dataset(train_ds)
 base_model = VGG16(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
 base_model.trainable = False
 
-model = Sequential([
+transfert_learning_model = Sequential([
     Rescaling(scale=1.0/127.5, offset=-1),
     base_model,
     Flatten(),
@@ -76,26 +76,53 @@ model = Sequential([
 strategy = tf.distribute.MirroredStrategy()
 
 with strategy.scope():
-    model.compile(optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+    custom_cnn_model = Sequential([
+        Conv2D(6, kernel_size=5, activation='relu', input_shape=(224, 224, 3)),
+        MaxPooling2D(pool_size=(2, 2)),
+        Conv2D(16, kernel_size=5, activation='relu'),
+        Conv2D(16, kernel_size=3, activation='relu'),
+        Flatten(),
+        Dense(units=120, activation='relu'),
+        Dense(units=84, activation='relu'),
+        Dense(num_class, activation='softmax')
+    ])
+    transfert_learning_model.compile(optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+    custom_cnn_model.compile(optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
 
-    # Entraîner le modèle
-    model_history = model.fit(train_ds, epochs=5, validation_data=val_ds)
+    # Train the transfert learning model
+    transfert_learning_model_history = transfert_learning_model.fit(train_ds, epochs=5, validation_data=val_ds)
+    # Train the custom cnn model
+    custom_cnn_model_history = custom_cnn_model.fit(train_ds, epochs=5, validation_data=val_ds)
 
-predictions = model.predict(test_ds)
-pred_classes = np.argmax(predictions, axis=1)
+# Transfert learning
+transfert_learning_predictions = transfert_learning_model.predict(test_ds)
+transfert_learning_pred_classes = np.argmax(transfert_learning_predictions, axis=1)
 
-# Visualize the prediction
-plt.figure(figsize=(10, 10))
-for images, labels in test_ds:
-    for i in range(9):
-        ax = plt.subplot(3, 3, i+1)
-        plt.imshow(images[i].numpy().astype("uint8"))
-        index_class = np.argmax(labels[i])
-        index_prediction = np.argmax(predictions[i])
-        plt.title(f"class={class_names[index_class]}, prediction={class_names[index_prediction]}")
-        plt.axis('off')
+# Custom cnn
+custom_cnn_predictions = custom_cnn_model.predict(test_ds)
+custom_cnn_pred_classes = np.argmax(custom_cnn_predictions, axis=1)
 
-plt.show()
+# Function to visualize the prediction of the model
+def visualize_prediction(prediction, fig_name):
+    plt.figure(figsize=(10, 10))
+    for images, labels in test_ds:
+        for i in range(9):
+            ax = plt.subplot(3, 3, i+1)
+            plt.imshow(images[i].numpy().astype("uint8"))
+            index_class = np.argmax(labels[i])
+            index_prediction = np.argmax(prediction[i])
+            plt.title(f"class={class_names[index_class]}, prediction={class_names[index_prediction]}")
+            plt.axis('off')
+
+    plt.savefig(fig_name + '.jpg')
+    plt.show()
+
+
+# Visualize the transfert learning model prediction
+visualize_prediction(transfert_learning_predictions, 'transfert-learning')
+
+# Visualize the custom cnn model prediction
+visualize_prediction(custom_cnn_predictions, 'custom-cnn')
 
 # Calculate the accuracy on the test dataset
 true_classes = []
@@ -103,18 +130,25 @@ for images, labels in test_ds:
     for i in range(len(images)):
         true_classes.append(np.argmax(labels[i]))
 
-# Model statistics
-accuracy = accuracy_score(true_classes, pred_classes)
-kappa_score = cohen_kappa_score(true_classes, pred_classes)
-report = classification_report(true_classes, pred_classes)
+# Transfert learning model statistics
+transfert_learning_accuracy = accuracy_score(true_classes, transfert_learning_pred_classes)
+transfert_learning_kappa_score = cohen_kappa_score(true_classes, transfert_learning_pred_classes)
+transfert_learning_report = classification_report(true_classes, transfert_learning_pred_classes)
 
-print("Transfer Learning (VGG16) - Accuracy:", accuracy, "Kappa:", kappa_score)
-print("Transfer Learning (VGG16) Report:\n", report)
+custom_cnn_accuracy = accuracy_score(true_classes, custom_cnn_pred_classes)
+custom_cnn_kappa_score = cohen_kappa_score(true_classes, custom_cnn_pred_classes)
+custom_cnn_report = classification_report(true_classes, custom_cnn_pred_classes)
+
+print("Transfer Learning (VGG16) - Accuracy:", transfert_learning_accuracy, "Kappa:", transfert_learning_kappa_score)
+print("Transfer Learning (VGG16) Report:\n", transfert_learning_report)
+
+print("Custom CNN - Accuracy:", custom_cnn_accuracy, "Kappa:", custom_cnn_kappa_score)
+print("Custom CNN Report:\n", custom_cnn_report)
 
 # Courbe d'apprentissage du modèle de transfer learning avec VGG16
 plt.subplot(1, 1, 1)
-plt.plot(model_history.history['accuracy'], label='Training Accuracy')
-plt.plot(model_history.history['val_accuracy'], label='Validation Accuracy')
+plt.plot(transfert_learning_model_history.history['accuracy'], label='Training Accuracy')
+plt.plot(transfert_learning_model_history.history['val_accuracy'], label='Validation Accuracy')
 plt.title('Transfer Learning (VGG16) - Learning Curve')
 plt.xlabel('Epoch')
 plt.ylabel('Accuracy')
@@ -122,4 +156,17 @@ plt.legend()
 
 plt.tight_layout()
 plt.savefig('TransfertLearning.jpg')
+plt.show()
+
+# Courbe d'apprentissage du modèle de transfer learning avec VGG16
+plt.subplot(1, 1, 1)
+plt.plot(custom_cnn_model_history.history['accuracy'], label='Training Accuracy')
+plt.plot(custom_cnn_model_history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Custom CNN - Learning Curve')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.tight_layout()
+plt.savefig('CustomCNN.jpg')
 plt.show()
